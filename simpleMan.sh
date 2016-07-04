@@ -9,8 +9,7 @@
     _simpleMan          ()  {   # ensures the entire script is downloaded first!
         #--------------------------------------------------
         _dbg                ()  {   #   handy debug helper
-            : #
-            command printf %s\\n "$*" 2>/dev/null
+            : # command printf %s\\n "$*" 2>/dev/null
         }
 
         _log                ()  {   #   handy log   wrapper
@@ -51,9 +50,9 @@ _log "
         }
 
         _reload_apache      ()  {
-            _log $SRVC $APACHE reload
+            _log 'reloading Apache'
             $($SRVC $APACHE reload >reload.log)
-            _dbg $($CAT reload.log | sed 's/[][*}{]/\\&/g')
+            _dbg $($CAT reload.log | sed 's/[][*}{]/''/g')
         }
 
     _parse_options      ()  {   #   parse command line arguments
@@ -112,15 +111,15 @@ _log "
     }
 
     _do_enable          ()  {   #   enables an Apache2 site by using the perl script a2ensite
-        _dbg "trying to enable: " $@
-        res=$($A2ENS $@)
+        _dbg "trying to enable: " $@ "at $TARGET_HOST"
+        res=$(ssh $USER@$TARGET_HOST $A2ENS $@)
         _log $res
         RELOAD_APACHE=1
     }
     
     _do_disable         ()  {   #   enables an Apache2 site by using the perl script a2ensite
-        _dbg "trying to disable: " $@
-        res=$($A2DIS $@)
+        _log "trying to disable: " $@ "at $TARGET_HOST"
+        res=$(ssh $USER@$TARGET_HOST $A2DIS $@)
         _log $res
         RELOAD_APACHE=1
     }
@@ -147,7 +146,25 @@ _log "
         local     SRVC='service'
         local     USER='devel'
         
+        local   VERBOSE
+        local   PASS
+        local   HOST
+        local   ENABLE_SITE
+        local   DISABLE_SITE
+        local   RELOAD_APACHE
+        local   DHCP_OPTION
+        local   TARGET_HOST
+        
         _parse_options $@
+
+        
+        TARGET_HOST=$HOST
+        if [ -z $TARGET_HOST ]; then
+            _warn "no target host specified!"
+            exit 123
+        fi
+        _log "Host: " $TARGET_HOST
+        
         
         # enable site if specified
         if [ $ENABLE_SITE ];then
