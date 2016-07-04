@@ -54,8 +54,19 @@ _log "
             $($SRVC $APACHE reload >reload.log)
             _dbg $($CAT reload.log | sed 's/[][*}{]/''/g')
         }
+        
+        _host_required      () {
+            TARGET_HOST=$HOST
+            if [ -z $TARGET_HOST ]; then
+                _warn "no target host specified!"
+                exit 123
+            fi
+            _log "Host: " $TARGET_HOST
+        }
+        
 
     _parse_options      ()  {   #   parse command line arguments
+      
       while [ $# -gt 1 ];
        do 
         local key=$1 
@@ -125,7 +136,16 @@ _log "
     }
     
     _do_set_dhcp_option ()  {   #   change or add a line in the DHCP configuration file by parsing it
-        _dbg "trying to set DHCP: " $@
+        _log "trying to set DHCP option: " $@
+        res=$(ssh $USER@$TARGET_HOST $CAT $DHCP_CFG )
+        
+        printf %s "$res" | while IFS= read -r line
+        do
+         # TODO
+         # find and change or add option line by parsing each except comments
+         #
+            _log $line
+        done
     }
     
         local       CD=$PWD
@@ -145,6 +165,8 @@ _log "
         local   APACHE='apache2'
         local     SRVC='service'
         local     USER='devel'
+        local DHCP_CFG='/etc/dhcp/dhcpd.conf'
+        local  reCMMNT='^[;]'
         
         local   VERBOSE
         local   PASS
@@ -155,32 +177,35 @@ _log "
         local   DHCP_OPTION
         local   TARGET_HOST
         
-        _parse_options $@
-
-        
-        TARGET_HOST=$HOST
-        if [ -z $TARGET_HOST ]; then
-            _warn "no target host specified!"
-            exit 123
+        if [ $ARGN -lt 1 ]; then
+         _usage
         fi
-        _log "Host: " $TARGET_HOST
+
+        _parse_options $@
         
         
         # enable site if specified
         if [ $ENABLE_SITE ];then
+            _host_required
             _do_enable $ENABLE_SITE
         fi
 
         # disable site if specified
         # (executed after so it will be finally disable if you specify it to enable as well )
         if [ $DISABLE_SITE ]; then
+            _host_required
             _do_disable $DISABLE_SITE
         fi
 
         if [ $RELOAD_APACHE ]; then
+            _host_required
             _reload_apache
         fi
         
+        if [ $DHCP_OPTION ]; then
+            _host_required
+            _do_set_dhcp_option $DHCP_OPTION
+        fi
         
     }
 
