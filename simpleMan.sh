@@ -7,19 +7,23 @@
 #   ssh devel@hostB '(ls /etc/apache2/sites-available)' > sites.cfg
 #   ssh devel@hostC '(cat /etc/dhcp/dhcpd.conf)'        > dhcpd.cfg
 
+# shellcheck disable=SC2086
+# shellcheck disable=SC2034
+
     _simpleMan          ()  {   # ensures the entire script is downloaded first!
     
         #--------------------------------------------------
         _noop               ()  {   #   does nothing
             :   #
         }
+
         _dbg                ()  {   #   handy debug helper
             :   #
-             command printf %s\\n "$*" 2>/dev/null
+             printf %s\\n "$*" 2>/dev/null
         }
 
         _log                ()  {   #   handy log   wrapper
-            command printf %s\\n "$*" 2>/dev/null
+             printf %s\\n "$*" 2>/dev/null
         }
 
         _warn               ()  {   #   handy warn  wrapper
@@ -45,12 +49,12 @@ _log "
         }
         #--------------------------------------------------
         _stop_apache        ()  {   #   stop apache service
-            local res=$(ssh $USER@$TARGET_HOST $SRVC $APACHE stop)
+             res=$(ssh $USER@$TARGET_HOST $SRVC $APACHE stop)
             _dbg "$res"
         }
 
         _start_apache       ()  {   #   start apache service
-            local res=$(ssh $USER@$TARGET_HOST $SRVC $APACHE start)
+             res=$(ssh $USER@$TARGET_HOST $SRVC $APACHE start)
             _dbg "$res"
         }
 
@@ -128,51 +132,55 @@ _log "
         }
 
         _do_enable          ()  {   #   enables an Apache2 site by using the perl script a2ensite
-            _dbg "trying to enable:  $@ at $TARGET_HOST"
-            res=$(ssh -t $USER@$TARGET_HOST sudo $A2ENS $@)
+            _dbg "trying to enable:  $* at $TARGET_HOST"
+            res=$(ssh -t $USER@$TARGET_HOST sudo $A2ENS "$*")
             _log "$res"
             #RELOAD_APACHE=1
         }
 
         _do_disable         ()  {   #   enables an Apache2 site by using the perl script a2ensite
-            _log "trying to disable:  $@ at $TARGET_HOST"
-            res=$(ssh -t $USER@$TARGET_HOST sudo $A2DIS $@)
+            _log "trying to disable:  $* at $TARGET_HOST"
+            res=$(ssh -t $USER@$TARGET_HOST sudo $A2DIS "$*")
             _log "$res"
             #RELOAD_APACHE=1
         }
 
         _do_reload_apache   ()  {   #   reloads apache 2 service
             _log 'reloading Apache'
-            $(ssh -t $USER@$TARGET_HOST sudo $SRVC $APACHE reload >reload.log)
-            _dbg $($CAT reload.log | sed 's/[][*}{]/'.'/g')
+            ssh -t $USER@$TARGET_HOST sudo $SRVC $APACHE reload >reload.log
+            _dbg "$($CAT reload.log | sed 's/[][*}{]/'.'/g')"
         }
     
+        
         _do_set_dhcp_option ()  {   #   change or add a line in the DHCP configuration file by parsing it
                                     #   we can parse the file much better [[ TO DO ..]]
-            _newFile () {
+            _newFile    ()  {
              printf ""      >  $FILE
+             printf ""      >  $CHNG_FILE
             }        
-            _wrFile  () {
-             printf "$1\n"  >> $FILE
-            }             
+            _wrFile     ()  {
+             printf "%s\n" "$*"  >> $FILE
+            }      
+            _chngd      ()  { 
+             printf "%s\n" "$*"  >  $CHNG_FILE
+            }
             _log "trying to set DHCP line: '$*'"
             res=$(ssh $USER@$TARGET_HOST $CAT $DHCP_CFG >dhcpd.tmp)
             res=$(<dhcpd.tmp)
 
-            local opt=$*
-            local FILE="dhcpd.new"
+            local       opt=$*
+            local      FILE="dhcpd.new"
+            local CHNG_FILE="dhcpd.chng"
             local tkns
             local tknn
-            local chngd
             local lp
             local last
 
             _newFile        # open file
         
-                                                                        
             printf %s "$res" | while IFS= read -r line
             do
-                line=$(echo "${line}" | sed -e 's/^[[:space:]]*//')     # remove leading space
+                line=$(printf "%s" "${line}" | sed -e 's/^[[:space:]]*//')   # remove leading space
                 tkns=($line)
                 tknn=${#tkns[@]} 
                 if [ $tknn -lt 1 ]; then                                # skip empty lines but save them to file
@@ -186,27 +194,36 @@ _log "
                                 _wrFile "${line}"                       # write comment line to file
                                 continue                                # skip comment line
                         ;;  
-                    option)     # special case
-                                #   if first token start with option 
-                                #   then should match also option name ..
+                    option)                                             # special case
+                                                                        #   if first token start with option 
+                                                                        #   then should match also option name ..
                         case ${tkns[1]} in
                             $2)
-                                _log "[] ${line} ]"
+                                _chngd  "$line"
+                                _dbg    "[] ${line} ]"
+                                _wrFile " ${opt};"                      # change line
                                 ;;
-                             *) 
-                                _log "${line}"
+                             *)                                         # no full match (skip)
+                                _dbg    "${line}"
+                                _wrFile "${line}"                       # write original line to file
                                 ;;
                         esac            
                         ;;
-                    $1)         # DHCP parameter MATCH ... check if ends with ';'
-                                _log "[ ${line} ]"
+                    $1)                                                 # DHCP parameter MATCH ... 
+                                                                        # check if ends with ';'
+                                _chngd  "$line"
+                                _dbg    "[ ${line} ]"
+                                _wrFile " ${opt};"                      # change line
                         ;;
-                    *)
-                                _dbg "$line"                            
+                    *)                                                  # no full match (skip)
+                                _dbg    "$line"                            
                                 _wrFile "${line}"                       # write original line to file
                         ;;
                 esac
             done
+            res="$($CAT $CHNG_FILE)"
+            _dbg "changed: $res"
+   
         }
     
         local       CD="$PWD"
@@ -222,12 +239,12 @@ _log "
         local    A2DIS='a2dissite'
         local   APACHE='apache2'
         local     SRVC='service'
-        local     USER=$(whoami)
         local DHCP_CFG='/etc/dhcp/dhcpd.conf'
 
         local   res
         local   line
         
+        local   USER
         local   VERBOSE
         local   PASS
         local   HOST
@@ -236,6 +253,8 @@ _log "
         local   RELOAD_APACHE
         local   DHCP_OPTION
         local   TARGET_HOST
+        
+        USER=$(whoami)
 
         _dbg "hello I'm " $ME  "running in:" $CD
         _dbg "with pid :" $PID "num args  :" $ARGN
@@ -245,7 +264,7 @@ _log "
             _usage
         fi
 
-        _parse_options $@
+        _parse_options "$@"
 
 
         
@@ -273,4 +292,4 @@ _log "
 
 ##  ========================================================================
 
-_simpleMan $@
+_simpleMan "$@"
