@@ -223,23 +223,21 @@ _log "
             done
             res="$($CAT $CHNG_FILE)"
             if [ ${#res} -gt 0 ]; then
-                DHCP_SCRIPT=updateDHCPD.sh
                 
                 _dbg "changed: $res"
                 _dbg "sending file to home dir"
-                scp $FILE $SSH_USER@$TARGET_HOST:~/                     # send file to home
-                res=$(ssh $SSH_USER@$TARGET_HOST $CAT $DHCP_SCRIPT >script.tmp)
+                scp $FILE $SSH_USER@$TARGET_HOST:~/                         # send file to home
+                res=$(ssh $SSH_USER@$TARGET_HOST $CAT $DHCP_SCR >script.tmp)
                 res=$(<script.tmp)
                 if [ ${#res} -eq 0 ]; then
                  _log "missing script sending it along .."
-                 scp DHCP_SCRIPT $SSH_USER@$TARGET_HOST:~/                  # send script along 
-                 ssh -t $SSH_USER@$TARGET_HOST  sudo chmod 744 $DHCP_SCRIPT # make it executable
+                 scp $DHCP_SCR $SSH_USER@$TARGET_HOST:~/                    # send script along 
+                 ssh -t $SSH_USER@$TARGET_HOST  sudo chmod 744 $DHCP_SCR    # make it executable
                 fi
-                                                                        # call script to do
-                                                                        # all remoteley
-                                                                        
-                _dbg "invoking updateDHCPD remote"
-                ssh -t $SSH_USER@$TARGET_HOST  sudo ./$DHCP_SCRIPT
+                                                                            # call script to do
+                                                                            # all things remoteley
+                _dbg "invoking $DHCP_SCR remote"
+                ssh -t $SSH_USER@$TARGET_HOST  sudo ./$DHCP_SCR
             fi
    
         }
@@ -258,6 +256,7 @@ _log "
         local   APACHE='apache2'
         local     SRVC='service'
         local DHCP_CFG='/etc/dhcp/dhcpd.conf'
+        local DHCP_SCR='updateDHCPD.sh' 
 
         local   res
         local   line
