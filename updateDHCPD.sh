@@ -1,15 +1,15 @@
-#!/bin/sh	
+#!/bin/sh
 
 #################
 # updateDHCPD.sh
 #################
 
-	_updateDHCPD	()	{
-		mv /etc/dhcpd/dhcpd.conf /etc/dhcpd/dhcpd.conf.saved 
+    _updateDHCPD    ()  {   # this is just a proof of concept script .. it should be done better
+        mv /etc/dhcpd/dhcpd.conf /etc/dhcpd/dhcpd.conf.saved
         cp ~/dhcpd.new /etc/dhcp/dhcpd.conf
-		chmod 644 /etc/dhcp/dhcpd.conf
-	    echo "Done." 
-	}
+        chmod 644 /etc/dhcp/dhcpd.conf
+        echo "Done."
+    }
 
 
 _updateDHCPD
