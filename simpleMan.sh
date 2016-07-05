@@ -4,9 +4,6 @@
 # simpleMan.sh
 ##############
 
-#   ssh devel@hostB '(ls /etc/apache2/sites-available)' > sites.cfg
-#   ssh devel@hostC '(cat /etc/dhcp/dhcpd.conf)'        > dhcpd.cfg
-
 # shellcheck disable=SC2086
 # shellcheck disable=SC2034
 
@@ -132,23 +129,22 @@ _log "
         }
 
         _do_enable          ()  {   #   enables an Apache2 site by using the perl script a2ensite
-            _dbg "trying to enable:  $* at $TARGET_HOST"
-            res=$(ssh -t $SSH_USER@$TARGET_HOST sudo $A2ENS "$*")
+            _log "trying to enable:  $* at $TARGET_HOST::"
+            ssh -t $SSH_USER@$TARGET_HOST "sudo $A2ENS $*"
             _log "$res"
             #RELOAD_APACHE=1
         }
 
         _do_disable         ()  {   #   enables an Apache2 site by using the perl script a2ensite
-            _log "trying to disable:  $* at $TARGET_HOST"
-            res=$(ssh -t $SSH_USER@$TARGET_HOST sudo $A2DIS "$*")
-            _log "$res"
+            _log "trying to disable:  $* at $TARGET_HOST::"
+            ssh -t $SSH_USER@$TARGET_HOST "sudo $A2DIS $*"
             #RELOAD_APACHE=1
         }
 
         _do_reload_apache   ()  {   #   reloads apache 2 service
-            _log 'reloading Apache'
-            ssh -t $SSH_USER@$TARGET_HOST sudo $SRVC $APACHE reload >reload.log
-            _dbg "$($CAT reload.log | sed 's/[][*}{]/'.'/g')"
+            # dirty fix for apache 2 script which eats the prompt
+            _log "reloading Apache::"
+            ssh -t $SSH_USER@$TARGET_HOST "sudo $SRVC $APACHE reload" 
         }
     
         
@@ -310,3 +306,10 @@ _log "
 ##  ========================================================================
 
 _simpleMan "$@"
+
+##  examples ..
+##  ./simpleMan.sh -h hostB -dis 00* -r
+##  ./simpleMan.sh -h hostB -en  00* -r
+##  ./simpleMan.sh -h hostc -o log-facility local77;
+##  ./simpleMan.sh -h hostc -o default-lease-time 600;
+
