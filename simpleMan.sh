@@ -49,12 +49,12 @@ _log "
         }
         #--------------------------------------------------
         _stop_apache        ()  {   #   stop apache service
-             res=$(ssh $USER@$TARGET_HOST $SRVC $APACHE stop)
+             res=$(ssh $SSH_USER@$TARGET_HOST $SRVC $APACHE stop)
             _dbg "$res"
         }
 
         _start_apache       ()  {   #   start apache service
-             res=$(ssh $USER@$TARGET_HOST $SRVC $APACHE start)
+             res=$(ssh $SSH_USER@$TARGET_HOST $SRVC $APACHE start)
             _dbg "$res"
         }
 
@@ -88,8 +88,8 @@ _log "
                     ;;
                     
                     -u|--user)
-                                USER=$1
-                                _dbg "user: $USER"
+                                SSH_USER=$1
+                                _dbg "user: $SSH_USER"
                                 shift #skip arg
                     ;;                                
                     
@@ -133,21 +133,21 @@ _log "
 
         _do_enable          ()  {   #   enables an Apache2 site by using the perl script a2ensite
             _dbg "trying to enable:  $* at $TARGET_HOST"
-            res=$(ssh -t $USER@$TARGET_HOST sudo $A2ENS "$*")
+            res=$(ssh -t $SSH_USER@$TARGET_HOST sudo $A2ENS "$*")
             _log "$res"
             #RELOAD_APACHE=1
         }
 
         _do_disable         ()  {   #   enables an Apache2 site by using the perl script a2ensite
             _log "trying to disable:  $* at $TARGET_HOST"
-            res=$(ssh -t $USER@$TARGET_HOST sudo $A2DIS "$*")
+            res=$(ssh -t $SSH_USER@$TARGET_HOST sudo $A2DIS "$*")
             _log "$res"
             #RELOAD_APACHE=1
         }
 
         _do_reload_apache   ()  {   #   reloads apache 2 service
             _log 'reloading Apache'
-            ssh -t $USER@$TARGET_HOST sudo $SRVC $APACHE reload >reload.log
+            ssh -t $SSH_USER@$TARGET_HOST sudo $SRVC $APACHE reload >reload.log
             _dbg "$($CAT reload.log | sed 's/[][*}{]/'.'/g')"
         }
     
@@ -165,7 +165,7 @@ _log "
              printf "%s\n" "$*"  >  $CHNG_FILE
             }
             _log "trying to set DHCP line: '$*'"
-            res=$(ssh $USER@$TARGET_HOST $CAT $DHCP_CFG >dhcpd.tmp)
+            res=$(ssh $SSH_USER@$TARGET_HOST $CAT $DHCP_CFG >dhcpd.tmp)
             res=$(<dhcpd.tmp)
 
             local       opt=$*
@@ -222,7 +222,12 @@ _log "
                 esac
             done
             res="$($CAT $CHNG_FILE)"
-            _dbg "changed: $res"
+            if [ ${#res} -gt 0 ]; then
+                _dbg "changed: $res"
+                res=$(scp $FILE $SSH_USER@$TARGET_HOST:~/$FILE)                     # send file to home
+                ssh -t $SSH_USER@$TARGET_HOST sudo mv $DHCP_CFG $DHCP_CFG.sav       # backup    config
+                ssh -t $SSH_USER@$TARGET_HOST sudo cp ~/$FILE $DHCP_CFG             # overwrite config
+            fi
    
         }
     
@@ -244,7 +249,7 @@ _log "
         local   res
         local   line
         
-        local   USER
+        local   SSH_USER
         local   VERBOSE
         local   PASS
         local   HOST
@@ -254,11 +259,11 @@ _log "
         local   DHCP_OPTION
         local   TARGET_HOST
         
-        USER=$(whoami)
+        SSH_USER=$(whoami)
 
         _dbg "hello I'm " $ME  "running in:" $CD
         _dbg "with pid :" $PID "num args  :" $ARGN
-        _dbg "user: "     $USER
+        _dbg "user: "     $SSH_USER
         
         if [ $ARGN -lt 1 ]; then
             _usage
