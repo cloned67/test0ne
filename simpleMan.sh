@@ -223,10 +223,23 @@ _log "
             done
             res="$($CAT $CHNG_FILE)"
             if [ ${#res} -gt 0 ]; then
+                DHCP_SCRIPT=updateDHCPD.sh
+                
                 _dbg "changed: $res"
-                res=$(scp $FILE $SSH_USER@$TARGET_HOST:~/$FILE)                     # send file to home
-                ssh -t $SSH_USER@$TARGET_HOST sudo mv $DHCP_CFG $DHCP_CFG.sav       # backup    config
-                ssh -t $SSH_USER@$TARGET_HOST sudo cp ~/$FILE $DHCP_CFG             # overwrite config
+                _dbg "sending file to home dir"
+                scp $FILE $SSH_USER@$TARGET_HOST:~/                     # send file to home
+                res=$(ssh $SSH_USER@$TARGET_HOST $CAT $DHCP_SCRIPT >script.tmp)
+                res=$(<script.tmp)
+                if [ ${#res} -eq 0 ]; then
+                 _log "missing script sending it along .."
+                 scp DHCP_SCRIPT $SSH_USER@$TARGET_HOST:~/                  # send script along 
+                 ssh -t $SSH_USER@$TARGET_HOST  sudo chmod 744 $DHCP_SCRIPT # make it executable
+                fi
+                                                                        # call script to do
+                                                                        # all remoteley
+                                                                        
+                _dbg "invoking updateDHCPD remote"
+                ssh -t $SSH_USER@$TARGET_HOST  sudo ./$DHCP_SCRIPT
             fi
    
         }
