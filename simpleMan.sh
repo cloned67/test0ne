@@ -141,24 +141,58 @@ _log "
             #RELOAD_APACHE=1
         }
 
-        _do_reload_apache   ()  {
+        _do_reload_apache   ()  {   #   reloads apache 2 service
             _log 'reloading Apache'
             $(ssh -t $USER@$TARGET_HOST sudo $SRVC $APACHE reload >reload.log)
             _dbg $($CAT reload.log | sed 's/[][*}{]/'.'/g')
         }
     
-    _do_set_dhcp_option ()  {   #   change or add a line in the DHCP configuration file by parsing it
-        _log "trying to set DHCP option: " $@
-        res=$(ssh $USER@$TARGET_HOST $CAT $DHCP_CFG )
+        _do_set_dhcp_option ()  {   #   change or add a line in the DHCP configuration file by parsing it
+                                    #   we can parse the file much better [[ TO DO ..]]
+            _newFile () {
+             printf ""      >  $FILE
+            }        
+            _wrFile  () {
+             printf "$1\n"  >> $FILE
+            }             
+            _log "trying to set DHCP line: '$*'"
+            res=$(ssh $USER@$TARGET_HOST $CAT $DHCP_CFG >dhcpd.tmp)
+            res=$(<dhcpd.tmp)
+
+            local opt=$*
+            local FILE="dhcpd.new"
+            local tkns
+            local tknn
+            local chngd
+            local lp
+            local last
+
+            _newFile        # open file
         
-        printf %s "$res" | while IFS= read -r line
-        do
-         # TODO
-         # find and change or add option line by parsing each except comments
-         #
-            _log $line
-        done
-    }
+                                                                        
+            printf %s "$res" | while IFS= read -r line
+            do
+                line=$(echo "${line}" | sed -e 's/^[[:space:]]*//')     # remove leading space
+                tkns=($line)
+                tknn=${#tkns[@]} 
+                if [ $tknn -lt 1 ]; then                                # skip empty lines but save them to file
+                 _wrFile 
+                 continue; 
+                fi
+                lp=$((tknn - 1))                                        # last token idx
+                last=${tkns[${lp}]}                                     # last token value
+                case "${tkns[0]}" in 
+                    \#*) 
+                                _wrFile "${line}"                       # write comment line to file
+                                continue                                # skip comment line
+                        ;;    
+                    *)
+                                _dbg "$line"                            
+                                _wrFile "${line}"                       # write original line to file
+                        ;;
+                esac
+            done
+        }
     
         local       CD="$PWD"
         local      CMD="$0"
