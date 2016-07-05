@@ -185,7 +185,22 @@ _log "
                     \#*) 
                                 _wrFile "${line}"                       # write comment line to file
                                 continue                                # skip comment line
-                        ;;    
+                        ;;  
+                    option)     # special case
+                                #   if first token start with option 
+                                #   then should match also option name ..
+                        case ${tkns[1]} in
+                            $2)
+                                _log "[] ${line} ]"
+                                ;;
+                             *) 
+                                _log "${line}"
+                                ;;
+                        esac            
+                        ;;
+                    $1)         # DHCP parameter MATCH ... check if ends with ';'
+                                _log "[ ${line} ]"
+                        ;;
                     *)
                                 _dbg "$line"                            
                                 _wrFile "${line}"                       # write original line to file
