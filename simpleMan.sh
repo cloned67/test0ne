@@ -8,7 +8,7 @@
 # shellcheck disable=SC2034
 
     _simpleMan          ()  {   # ensures the entire script is downloaded first!
-    
+
         #--------------------------------------------------
         _noop               ()  {   #   does nothing
             :   #
@@ -63,7 +63,7 @@ _log "
             fi
             _log "Host: " $TARGET_HOST
         }
-        
+
         _parse_options      ()  {   #   parse command line arguments
 
             while [ $# -gt 0 ];
@@ -83,17 +83,21 @@ _log "
                                 _dbg "password set"
                                 shift # skip arg
                     ;;
-                    
+
                     -u|--user)
                                 SSH_USER=$1
                                 _dbg "user: $SSH_USER"
                                 shift #skip arg
-                    ;;                                
-                    
-                    -r|--reload)
+                    ;;
+
+                    -ra|--apache-reload)
                                 RELOAD_APACHE=1
                     ;;
-                    
+
+                    -rd|--dhcpd-restart)
+                                RESTART_DHCPD=1
+                    ;;
+
                     -h|--hst|--host)                    # target host
 
                                 HOST=$1
@@ -113,7 +117,17 @@ _log "
                                 shift # skip arg
                     ;;
 
-                    -o|--dhopt|--dhcp_opt|--dhcp_option)# DHCP option
+                    -o|--dhopt|--dhcp-opt|--dhcp-option)                # modify  a DHCP option
+                                DHCP_OPTION=$*
+                                break;
+                    ;;    
+                    -oa|--add-dhopt|--add-dhcp-opt|--add-dhcp-option)   # add new   DHCP option
+                                DHCP_OPT_OP=ADD
+                                DHCP_OPTION=$*
+                                break;
+                    ;;                    
+                    -od|--del-dhopt|--del-dhcp-opt|--del-dhcp-option)   # delete  a DHCP option
+                                DHCP_OPT_OP=DEL
                                 DHCP_OPTION=$*
                                 break;
                     ;;
@@ -142,22 +156,25 @@ _log "
         }
 
         _do_reload_apache   ()  {   #   reloads apache 2 service
-            # dirty fix for apache 2 script which eats the prompt
             _log "reloading Apache::"
-            ssh -t $SSH_USER@$TARGET_HOST "sudo $SRVC $APACHE reload" 
+            ssh -t $SSH_USER@$TARGET_HOST "sudo $SRVC $APACHE reload"
         }
-    
-        
+
+        _do_restart_DHCP    ()  {   #   reloads DHCP server
+            _log "reloading DHCP server::"
+            ssh -t $SSH_USER@$TARGET_HOST "sudo $SRVC $DHCPD  restart"
+        }
+
         _do_set_dhcp_option ()  {   #   change or add a line in the DHCP configuration file by parsing it
                                     #   we can parse the file much better [[ TO DO ..]]
             _newFile    ()  {
              printf ""      >  $FILE
              printf ""      >  $CHNG_FILE
-            }        
+            }
             _wrFile     ()  {
              printf "%s\n" "$*"  >> $FILE
-            }      
-            _chngd      ()  { 
+            }
+            _chngd      ()  {
              printf "%s\n" "$*"  >  $CHNG_FILE
             }
             _log "trying to set DHCP line: '$*'"
@@ -173,61 +190,84 @@ _log "
             local last
 
             _newFile        # open file
-        
+
             printf %s "$res" | while IFS= read -r line
             do
                 line=$(printf "%s" "${line}" | sed -e 's/^[[:space:]]*//')   # remove leading space
                 tkns=($line)
-                tknn=${#tkns[@]} 
+                tknn=${#tkns[@]}
                 if [ $tknn -lt 1 ]; then                                # skip empty lines but save them to file
-                 _wrFile 
-                 continue; 
+                 _wrFile
+                 continue;
                 fi
                 lp=$((tknn - 1))                                        # last token idx
                 last=${tkns[${lp}]}                                     # last token value
-                case "${tkns[0]}" in 
-                    \#*) 
+                case "${tkns[0]}" in
+                    \#*)
                                 _wrFile "${line}"                       # write comment line to file
                                 continue                                # skip comment line
-                        ;;  
+                        ;;
                     option)                                             # special case
-                                                                        #   if first token start with option 
+                                                                        #   if first token start with option
                                                                         #   then should match also option name ..
                         case ${tkns[1]} in
                             $2)
                                 _chngd  "$line"
                                 _dbg    "[] ${line} ]"
-                                _wrFile " ${opt};"                      # change line
+                                if [ $DHCP_OPT_OP == DEL ]; then
+                                    _warn "[${line}] has been deleted!"
+                                else
+                                    _wrFile " ${opt};"                  # change line
+                                fi    
                                 ;;
                              *)                                         # no full match (skip)
                                 _dbg    "${line}"
                                 _wrFile "${line}"                       # write original line to file
                                 ;;
-                        esac            
+                        esac
                         ;;
-                    $1)                                                 # DHCP parameter MATCH ... 
+                    $1)                                                 # DHCP parameter MATCH ...
                                                                         # check if ends with ';'
                                 _chngd  "$line"
                                 _dbg    "[ ${line} ]"
-                                _wrFile " ${opt};"                      # change line
+                                if [ $DHCP_OPT_OP == DEL ]; then
+                                    _warn "[${line}] has been deleted!"
+                                else
+                                    _wrFile " ${opt};"                  # change line
+                                fi    
                         ;;
                     *)                                                  # no full match (skip)
-                                _dbg    "$line"                            
+                                _dbg    "$line"
                                 _wrFile "${line}"                       # write original line to file
                         ;;
                 esac
             done
             res="$($CAT $CHNG_FILE)"
+            if [ $DHCP_OPT_OP == ADD ]; then
+                if [ ${#res} -gt 0 ]; then
+                    _warn "can't add option line, already exist: $res (delete it first)"
+                    res=                                                #not changed
+                else
+                    _warn "adding new line: ${opt}"
+                    res=" ${opt};"                                      # add new line
+                    _wrFile $res
+                fi   
+            fi
+            if [ $DHCP_OPT_OP == DEL ]; then
+                if [ ${#res} -eq 0 ]; then
+                    _warn "can't find option for: $opt (sorry)"
+                fi
+            fi
             if [ ${#res} -gt 0 ]; then
-                
                 _dbg "changed: $res"
+               
                 _dbg "sending file to home dir"
                 scp $FILE $SSH_USER@$TARGET_HOST:~/                         # send file to home
                 res=$(ssh $SSH_USER@$TARGET_HOST $CAT $DHCP_SCR >script.tmp)
                 res=$(<script.tmp)
                 if [ ${#res} -eq 0 ]; then
                  _log "missing script sending it along .."
-                 scp $DHCP_SCR $SSH_USER@$TARGET_HOST:~/                    # send script along 
+                 scp $DHCP_SCR $SSH_USER@$TARGET_HOST:~/                    # send script along
                  ssh -t $SSH_USER@$TARGET_HOST  sudo chmod 744 $DHCP_SCR    # make it executable
                 fi
                                                                             # call script to do
@@ -235,9 +275,9 @@ _log "
                 _dbg "invoking $DHCP_SCR remote"
                 ssh -t $SSH_USER@$TARGET_HOST  sudo ./$DHCP_SCR
             fi
-   
+
         }
-    
+
         local       CD="$PWD"
         local      CMD="$0"
         local       ME=${CMD##*/}
@@ -250,13 +290,14 @@ _log "
         local    A2ENS='a2ensite'
         local    A2DIS='a2dissite'
         local   APACHE='apache2'
+        local    DHCPD='isc-dhcp-server'
         local     SRVC='service'
         local DHCP_CFG='/etc/dhcp/dhcpd.conf'
-        local DHCP_SCR='updateDHCPD.sh' 
+        local DHCP_SCR='updateDHCPD.sh'
 
         local   res
         local   line
-        
+
         local   SSH_USER
         local   VERBOSE
         local   PASS
@@ -264,15 +305,17 @@ _log "
         local   ENABLE_SITE
         local   DISABLE_SITE
         local   RELOAD_APACHE
+        local   RESTART_DHCPD
         local   DHCP_OPTION
+        local   DHCP_OPT_OP
         local   TARGET_HOST
-        
+
         SSH_USER=$(whoami)
 
         _dbg "hello I'm " $ME  "running in:" $CD
         _dbg "with pid :" $PID "num args  :" $ARGN
         _dbg "user: "     $SSH_USER
-        
+
         if [ $ARGN -lt 1 ]; then
             _usage
         fi
@@ -280,14 +323,14 @@ _log "
         _parse_options "$@"
 
 
-        
+
         if [ $ENABLE_SITE ];then            # enable site if specified
             _host_required
             _do_enable $ENABLE_SITE
         fi
-        
+
         if [ $DISABLE_SITE ]; then          # disable site if specified
-            _host_required                  # (executed after so it will be finally disable 
+            _host_required                  # (executed after so it will be finally disable
             _do_disable $DISABLE_SITE       #  if you specify it to enable as well )
         fi
 
@@ -301,15 +344,15 @@ _log "
             _do_set_dhcp_option $DHCP_OPTION
         fi
 
+        if [ $RESTART_DHCPD ]; then         # do we need to restart DHCP ?
+            _host_required
+            _do_restart_DHCP
+        fi
+
     }
 
 ##  ========================================================================
 
 _simpleMan "$@"
 
-##  examples ..
-##  ./simpleMan.sh -h hostB -dis 00* -r
-##  ./simpleMan.sh -h hostB -en  00* -r
-##  ./simpleMan.sh -h hostc -o log-facility local77;
-##  ./simpleMan.sh -h hostc -o default-lease-time 600;
 
