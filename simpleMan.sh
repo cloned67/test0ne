@@ -15,8 +15,8 @@
         }
 
         _dbg                ()  {   #   handy debug helper
-            :   #
-             printf %s\\n "$*" 2>/dev/null
+            :   #       
+            printf %s\\n "$*" 2>/dev/null
         }
 
         _log                ()  {   #   handy log   wrapper
@@ -122,12 +122,12 @@ _log "
                                 break;
                     ;;    
                     -oa|--add-dhopt|--add-dhcp-opt|--add-dhcp-option)   # add new   DHCP option
-                                DHCP_OPT_OP=ADD
+                                DHCP_OPT_ADD=1
                                 DHCP_OPTION=$*
                                 break;
                     ;;                    
                     -od|--del-dhopt|--del-dhcp-opt|--del-dhcp-option)   # delete  a DHCP option
-                                DHCP_OPT_OP=DEL
+                                DHCP_OPT_DEL=1
                                 DHCP_OPTION=$*
                                 break;
                     ;;
@@ -214,7 +214,7 @@ _log "
                             $2)
                                 _chngd  "$line"
                                 _dbg    "[] ${line} ]"
-                                if [ $DHCP_OPT_OP == DEL ]; then
+                                if [ $DHCP_OPT_DEL ]; then
                                     _warn "[${line}] has been deleted!"
                                 else
                                     _wrFile " ${opt};"                  # change line
@@ -230,7 +230,7 @@ _log "
                                                                         # check if ends with ';'
                                 _chngd  "$line"
                                 _dbg    "[ ${line} ]"
-                                if [ $DHCP_OPT_OP == DEL ]; then
+                                if [ $DHCP_OPT_DEL  ]; then
                                     _warn "[${line}] has been deleted!"
                                 else
                                     _wrFile " ${opt};"                  # change line
@@ -243,17 +243,18 @@ _log "
                 esac
             done
             res="$($CAT $CHNG_FILE)"
-            if [ $DHCP_OPT_OP == ADD ]; then
+            if [ $DHCP_OPT_ADD ]; then
                 if [ ${#res} -gt 0 ]; then
                     _warn "can't add option line, already exist: $res (delete it first)"
                     res=                                                #not changed
                 else
                     _warn "adding new line: ${opt}"
                     res=" ${opt};"                                      # add new line
-                    _wrFile $res
+                    _wrFile $res 
+                    _wrFile                                             # just in case !
                 fi   
             fi
-            if [ $DHCP_OPT_OP == DEL ]; then
+            if [ $DHCP_OPT_DEL ]; then
                 if [ ${#res} -eq 0 ]; then
                     _warn "can't find option for: $opt (sorry)"
                 fi
@@ -274,6 +275,8 @@ _log "
                                                                             # all things remoteley
                 _dbg "invoking $DHCP_SCR remote"
                 ssh -t $SSH_USER@$TARGET_HOST  sudo ./$DHCP_SCR
+            else 
+                _log "can't find $opt"
             fi
 
         }
@@ -307,7 +310,8 @@ _log "
         local   RELOAD_APACHE
         local   RESTART_DHCPD
         local   DHCP_OPTION
-        local   DHCP_OPT_OP
+        local   DHCP_OPT_ADD
+        local   DHCP_OPT_DEL
         local   TARGET_HOST
 
         SSH_USER=$(whoami)
